@@ -4,14 +4,17 @@ __git__     = 'https://github.com/yanmarques/youtube-extractor'
 __version__ = '1.0'
 __banner__  = 'youtube-extractor v.%s' % __version__ 
 
+from logger import *
+from abc import abstractmethod
 import sys
 import os
 import subprocess 
 import itertools
 import time
 import threading
-from logger import *
-from abc import abstractmethod
+import re
+import shlex
+import urllib
 
 # Detects user platform
 if sys.platform.startswith('win32'):
@@ -23,13 +26,19 @@ else:
 
 pyversion = '.'.join(str(minor) for minor in sys.version_info[:2])
 logger = Logger()
-logger.set_verbose()
 
 def signalhandler(singnum, frame):
     """Handle a keyboard interrupt"""
     log('\n[*] Received user keyboard interrupt.')
     print('[*] Exiting.')
     sys.exit()
+
+class ProcessNotKilledException(BaseException):
+    def __init__(self, message):
+        self.message = message
+    
+    def __repr__():
+        return str(self.message)
 
 class Loader(object):
     """Start an animation"""
@@ -60,6 +69,12 @@ class Loader(object):
 
 class Service(object):
     """Service manager"""
+    def __init__(self):
+        self.started = False
+        self.tried_to_install = False
+        self.installed = False
+        self.event = threading.Event()
+
     @abstractmethod
     def start(self):
         """Start running service"""
@@ -71,39 +86,49 @@ class Service(object):
         pass
 
     @abstractmethod
+    def stop(self):
+        pass
+
+    @abstractmethod
     def _install(self):
         """Try to install service based on user platform"""
         pass
 
-    def execute_process(self, command):
+    def execute_process(self, command, shell=True, root=False):
         """Handle a process execution returning a tuple with stdout and stderr"""
-        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if root:
+            command[0] = 'sudo ' + command[0]
+        
+        logger.log('[*] Running: '+(' '.join(command) if type(command) is list else command), YELLOW)
+        process = subprocess.Popen(command, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         try:
-            stdout, stderr = process.communicate(timeout=5)
-        except subprocess.TimeoutException:
+            if root and self._require_root:
+                stdout, stderr = process.communicate()
+            else:    
+                stdout, stderr = process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
             stdout, stderr = (b'', b'Process timed out.')
 
-        return stdout, stderr
+        if root and 'incorrect' in stderr.decode().lower():
+            return '', 'Incorrect password.'
+        
+        return self._parse_output(stdout, stderr)
 
-    def parse_stderr(self, stderr):
+    def _parse_output(self, stdout, stderr):
         """Parse a stderr output buffer decode and strip new-lines on end of string"""
-        if type(stderr) is bytes:
-            stderr = stderr.decode()
-        return stderr.rstrip().lstrip()
+        if type(stderr) is not bytes or type(stdout) is not bytes:
+            raise TypeError('Invalid type for argument. Stdout and stderr must be a bytes-like object.')
+        return stdout.decode().rstrip().lstrip(), stderr.decode().rstrip().lstrip()
 
     def _require_root(self):
-        """Require that user be root"""
+        """Indicate wheter user is root"""
         if os.getuid() != 0:
-            print(RED + '[-] You need be root!' + NULL)
-            sys.exit()
+            return True
+        return False
 
 class YoutubeDl(Service):
     """Use youtube-dl wonderfull script to execute content download"""
-    def __init__(self):
-        self.tried_to_install = False
-        self.installed = False
-
     def start(self, *args):
         """Run youtube-dl script on process"""
         logger.log('[*] Running youtube-dl service.')
@@ -114,8 +139,7 @@ class YoutubeDl(Service):
                 stderr = self.execute_process(command)[1]
                 tries += 1
                 self.tried_to_install = True
-                if stderr and 'usage' not in stderr.decode().lower():
-                    stderr = self.parse_stderr(stderr)
+                if stderr and 'usage' not in stderr.lower():
                     logger.log('[*] Error: '+ stderr, RED)
                     self._install()
                 else:
@@ -129,8 +153,7 @@ class YoutubeDl(Service):
         if args:
             command.append(*args)
         stderr = self.execute_process(command)[1]
-        if stderr and not 'help' in stderr.decode():
-            stderr = self.parse_stderr(stderr)
+        if stderr and not 'help' in stderr.lower():
             logger.log('[*] Error output: '+ stderr, RED)
             return False
         return True
@@ -141,25 +164,22 @@ class YoutubeDl(Service):
 
     def _install(self):
         """Try to install youtube-dl with python"""
-        self._require_root()
         loader = Loader(message='[*] Installing youtube-dl', color=YELLOW)
         loader.start()
-        command = ['sudo', '-H',  'python' + pyversion, '-m', 'pip', 'install', 'youtube-dl']
-        logger.log('[*] Running: '+' '.join(command))
-        stderr = self.execute_process(command)[1]
+        command = ['-H python' + pyversion + ' -m pip install youtube-dl']
+        stderr = self.execute_process(command, root=True)[1]
         if stderr:
+            logger.log('[-] Error: '+ stderr, RED)
             logger.log('[*] Last command failed.')
             if platform == 'darwin':
-                command = ['sudo', 'brew', 'install', 'youtube-dl']
-                logger.log('[*] Running:' + ' '.join(command))
-                stderr = self.execute_process(command)[1]
+                command = ['brew', 'install', 'youtube-dl']
+                stderr = self.execute_process(command, root=True)[1]
             elif platform == 'linux':
-                command = ['sudo apt-get install youtube-dl --assume-yes']
-                logger.log('[*] Running:' + ' '.join(command))
-                stdout, stderr = self.execute_process(command)
+                command = ['apt-get', 'install', '-y', 'youtube-dl']
+                stderr = self.execute_process(command, root=True)[1]
         loader.stop()
         if stderr:
-            logger.log('\n[*] Error installing: '+ self.parse_stderr(stderr), RED)
+            logger.log('\n[*] Error installing: '+ stderr, RED)
             print('[*] Could not install youtube-dl.')
             print('[+] See: https://rg3.github.io/youtube-dl')
             sys.exit()

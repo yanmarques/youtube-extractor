@@ -15,3 +15,9 @@ else:
     platform = 'linux' 
 
 pyversion = '.'.join(str(minor) for minor in sys.version_info[:2])
+
+def signalhandler(singnum, frame):
+    """Handle a keyboard interrupt"""
+    log('\n[*] Received user keyboard interrupt.')
+    print('[*] Exiting.')
+    sys.exit()

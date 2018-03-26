@@ -26,6 +26,7 @@ else:
 
 pyversion = '.'.join(str(minor) for minor in sys.version_info[:2])
 logger = Logger()
+logger.set_verbose()
 
 def signalhandler(singnum, frame):
     """Handle a keyboard interrupt"""
@@ -94,19 +95,21 @@ class Service(object):
         """Try to install service based on user platform"""
         pass
 
-    def execute_process(self, command, shell=True, root=False):
+    def execute_process(self, command, shell=True, root=False, loader=None):
         """Handle a process execution returning a tuple with stdout and stderr"""
         if root:
             command[0] = 'sudo ' + command[0]
-        
+
         logger.log('[*] Running: '+(' '.join(command) if type(command) is list else command), YELLOW)
-        process = subprocess.Popen(command, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(command, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
 
         try:
             if root and self._require_root:
                 stdout, stderr = process.communicate()
             else:    
                 stdout, stderr = process.communicate(timeout=5)
+            if loader:
+                    loader.start()
         except subprocess.TimeoutExpired:
             stdout, stderr = (b'', b'Process timed out.')
 
@@ -165,11 +168,10 @@ class YoutubeDl(Service):
     def _install(self):
         """Try to install youtube-dl with python"""
         loader = Loader(message='[*] Installing youtube-dl', color=YELLOW)
-        loader.start()
         command = ['-H python' + pyversion + ' -m pip install youtube-dl']
-        stderr = self.execute_process(command, root=True)[1]
+        stderr = self.execute_process(command, root=True, loader=loader)[1]
         if stderr:
-            logger.log('[-] Error: '+ stderr, RED)
+            logger.log('\n[-] Error: '+ stderr, RED)
             logger.log('[*] Last command failed.')
             if platform == 'darwin':
                 command = ['brew', 'install', 'youtube-dl']
@@ -184,3 +186,163 @@ class YoutubeDl(Service):
             print('[+] See: https://rg3.github.io/youtube-dl')
             sys.exit()
         logger.log('\n[*] youtube-dl has been installed.', color=GREEN)
+
+class Tor(Service):
+    """Start a tor proxy on user machine"""
+    def start(self):
+        """Start tor"""
+        if self.started:
+            logger.log('[*] Service already started.')
+            return True
+       
+        logger.log('[*] Starting tor service.')
+        if not self._kill_process():
+            raise ProcessNotKilledException('Could not kill a already running tor process.')
+
+        command = ['tor']
+        if not self.installed and not self.tried_to_install:
+            tries = 0
+            while tries < 2:
+                stderr = self.execute_process(command)
+                tries += 1
+                if stderr:
+                    if platform == 'linux':
+                        logger.log('[*] Trying to start with systemctl interface.', YELLOW)
+                        stderr = self.execute_process(['systemctl start tor.service'], root=True)[1]
+                        if not stderr:
+                            self.installed = True
+                            break
+                    logger.log('[*] Error: '+ stderr, RED)
+                    self._install()
+                else:
+                    self.installed = True
+                    break
+                
+        if self.tried_to_install and not self.installed:
+            return False
+
+        self._kill_process()
+        if platform == 'linux':
+            if not self.execute_process(['systemctl start tor'], root=True)[1]:
+                logger.log('[*] Started tor on systemctl interface.', YELLOW)
+                self.started = True
+                return True
+        self._start_in_background()
+        return True
+
+    def restart(self, *args):
+        """Restart tor service"""
+        if not self.started:
+            return self.start()
+
+        if not self.installed and self.tried_to_install:
+           raise Exception('Trying to restart a not installed service.')
+    
+        self.stop()
+        if platform == 'linux':
+            if not self.execute_process(['systemctl restart tor'], root=True)[1]:
+                logger.log('[*] Restarted tor on systemctl interface.', YELLOW)
+                self.started = True
+                return True
+
+        self._start_in_background()
+        return True
+
+    def stop(self):
+        """Stop running process"""
+        logger.log('[*] Stopping tor service.')
+        self.event.clear()
+        self._kill_process()
+        time.sleep(1)
+
+    def _start_in_background(self):
+        """Start service in background with a Thread"""
+        if self.started:
+            logger.log('[*] Tor service already running.')
+        elif not self.installed and self.tried_to_install:
+            logger.log('[*] Cannot start in background. First must be installed.')
+
+        def run():
+            logger.log('[*] Started tor process in background.')
+            process = subprocess.Popen(['tor'], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.started = True
+            while self.event.is_set():
+                process.communicate()
+                time.sleep(1)
+            self.started = False
+            process.kill()
+
+        self.event.set()
+        threading.Thread(target=run).start()
+    
+    def _install(self):
+        """Try to install tor with system installers"""
+        loader = Loader(message='[*] Installing tor', color=YELLOW)
+        loader.start()
+        if platform == 'darwin':
+            command = ['brew install tor']
+            stderr = self.execute_process(command, root=True)[1]
+        elif platform == 'linux':
+            command = ['apt-get install -y tor']
+            stdout, stderr = self.execute_process(command, root=True)   
+        else:
+            loader.stop()
+            print('\n[-] You are using Windows. No available installers.')
+            print('[+] See: https://rg3.github.io/youtube-dl')
+            sys.exit()
+        loader.stop()
+        if stderr:
+            logger.log('\n[*] Error installing: '+ stderr, RED)
+            print('[*] Could not install tor.')
+            print('[+] See: https://rg3.github.io/youtube-dl')
+            sys.exit()
+        self.tried_to_install = True
+        logger.log('\n[*] tor has been installed.', color=GREEN)
+
+    def _kill_process(self):
+        """Handle the process being executed on tor default port and kill it"""
+        if platform == 'windows':
+            command = ['netstat -ano | findstr :9050']
+            stdout, sterr = self.execute_process(command)
+            if not stdout:
+                return True
+            else:
+                stdout = ' '.join([e for e in stdout.split(' ') if e])
+                pid = re.findall(r'LISTENING (\d)+', stdout)
+                if len(pid) > 0:
+                    stderr = self.execute_process(['taskkill /PID {} /F'.format(pid[0])])[1]
+                    if not stderr:
+                        return True
+                return False
+
+        if platform == 'linux':
+            command = 'sudo systemctl stop tor'
+            self.execute_process(command)[1]
+
+        command = ['netstat -nlp | grep 9050']
+        stdout, stderr = self.execute_process(command, root=True)
+        if not stdout:
+            return True
+        else:
+            pid = re.findall(r"(\d+)\/[a-zA-Z]+", stdout)
+            if len(pid) > 0:
+                stderr = self.execute_process(['kill '+ pid[0]], root=True)[1]
+                if not stderr:
+                    return True
+            return False
+
+if __name__ == '__main__':
+    # ydl = YoutubeDl()
+    # if ydl.start():
+    #     print('youtube-dl is ready')
+    # else:
+    #     print('youtube-dl is messed up')
+    tor = Tor()
+    if tor.start():
+        print('tor is ready')
+        if tor.restart():
+            print('tor restarted with success')
+        else:
+            print('tor restarted with error')
+    else:
+        print('tor failed on start')

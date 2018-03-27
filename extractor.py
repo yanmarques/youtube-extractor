@@ -265,11 +265,11 @@ class Tor(Service):
     def stop(self):
         """Stop running process"""
         logger.log('[*] Stopping tor service.')
-        self.event.clear()
-        time.sleep(1)
 
         # kill any remaining process
         self._kill_process()
+        self.socket_patched = False
+        self.pid = None
 
     def _start_in_background(self):
         """Start service in background with a Thread"""

@@ -321,6 +321,14 @@ class Tor(Service):
 
     def _kill_process(self):
         """Handle the process being executed on tor default port and kill it"""
+        if self.started and self.pid:
+            if platform == 'windows':
+                error = self.execute_process(['taskkill /PID {} /F'.format(self.pid)])[1]
+            else:
+                error = self.execute_process(['kill ' + str(self.pid)])[1]
+            if not error:
+                return True
+                
         if platform == 'windows':
             command = ['netstat -ano | findstr :9050']
             stdout, sterr = self.execute_process(command)

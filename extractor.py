@@ -15,6 +15,7 @@ import threading
 import re
 import shlex
 import urllib
+import stem
 
 # Detects user platform
 if sys.platform.startswith('win32'):
@@ -95,7 +96,7 @@ class Service(object):
         """Try to install service based on user platform"""
         pass
 
-    def execute_process(self, command, shell=True, root=False, loader=None, timeout=5):
+    def execute_process(self, command, shell=True, root=False, loader=None, timeout=5, pid=False):
         """Handle a process execution returning a tuple with stdout and stderr"""
         if root:
             command[0] = 'sudo ' + command[0]
@@ -116,7 +117,10 @@ class Service(object):
         if root and 'incorrect' in stderr.decode().lower():
             return '', 'Incorrect password.'
         
-        return self._parse_output(stdout, stderr)
+        output, errors = self._parse_output(stdout, stderr)
+        if pid:
+            return output, errors, process.pid
+        return output, errors
 
     def check_availability(self, command, errors=False):
         """Check if service is available on user system"""
@@ -278,23 +282,18 @@ class Tor(Service):
         elif not self.installed and self.tried_to_install:
             logger.log('[*] Cannot start in background. First must be installed.')
 
-        def run():
-            logger.log('[*] Started tor process in background.')
-            process = subprocess.Popen(['tor'], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            while self.event.is_set():
-                process.communicate()
-                time.sleep(1)
-            self.started = False
-
-            # receive the process return code
-            if process.poll() and process.poll() < 0:
-                if platform == 'windows':
-                    process.terminate()
-                else:
-                    process.kill()
         self.started = True
-        self.event.set()
-        threading.Thread(target=run).start()
+
+        if platform == 'linux':
+            errors, pid = self.execute_process(['systemctl start tor'], root=True, pid=True)[0:]
+            if not errors:
+                logger.log('[*] Started tor on systemctl interface.', YELLOW)
+                self.pid = pid
+                return True
+
+        process = stem.process.launch_tor()
+        self.pid = process.pid
+        return True
     
     def _install(self):
         """Try to install tor with system installers"""

@@ -250,14 +250,15 @@ class Tor(Service):
 
         if not self.installed and self.tried_to_install:
            raise Exception('Trying to restart a not installed service.')
-    
-        self.stop()
+
         if platform == 'linux':
+            # try to restart tor using systemctl interface
             if not self.execute_process(['systemctl restart tor'], root=True)[1]:
                 logger.log('[*] Restarted tor on systemctl interface.', YELLOW)
                 self.started = True
                 return True
 
+        self.stop()
         self._start_in_background()
         return True
 

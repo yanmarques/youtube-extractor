@@ -301,18 +301,18 @@ class Tor(Service):
         loader.start()
         if platform == 'darwin':
             command = ['brew install tor']
-            stderr = self.execute_process(command, timeout=None)[1]
+            error = self.execute_process(command, timeout=None)[1]
         elif platform == 'linux':
             command = ['apt-get install -y tor']
-            stdout, stderr = self.execute_process(command, timeout=None, root=True)   
+            error = self.execute_process(command, timeout=None, root=True)[1]
         else:
             loader.stop()
             print('\n[-] You are using Windows. No available installers.')
             print('[+] See: https://rg3.github.io/youtube-dl')
             sys.exit()
         loader.stop()
-        if stderr:
-            logger.log('\n[*] Error installing: '+ stderr, RED)
+        if error:
+            logger.log('\n[*] Error installing: '+ error, RED)
             print('[*] Could not install tor.')
             print('[+] See: https://rg3.github.io/youtube-dl')
             sys.exit()

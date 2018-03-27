@@ -118,6 +118,16 @@ class Service(object):
         
         return self._parse_output(stdout, stderr)
 
+    def check_availability(self, command, errors=False):
+        """Check if service is available on user system"""
+        stderr = self.execute_process(command if type(command) is list else [command])[1]
+        
+        if stderr and ( 'usage' in stderr.lower() or 'Process timed out' in stderr ):
+            return True
+        if errors:
+            return (None, stderr)
+        return False
+
     def _parse_output(self, stdout, stderr):
         """Parse a stderr output buffer decode and strip new-lines on end of string"""
         if type(stderr) is not bytes or type(stdout) is not bytes:

@@ -199,24 +199,31 @@ class YoutubeDl(Service):
 
 class Tor(Service):
     """Start a tor proxy on user machine"""
+    def __init__(self):
+        self.started = False
+        self.tried_to_install = False
+        self.installed = False
+        self.ip = None
+        self.socket_patched = False
+        self.pid = None
+
     def start(self):
         """Start tor"""
         if self.started:
             logger.log('[*] Service already started.')
             return True
        
-        logger.log('[*] Starting tor service.')
         if not self._kill_process():
-            self.stop()
             raise ProcessNotKilledException('Could not kill a already running tor process.')
 
+        logger.log('[*] Starting tor service.')
         command = ['tor']
         if not self.installed and not self.tried_to_install:
             tries = 0
             while tries < 2:
-                stderr = self.execute_process(command)[1]
+                available = self.check_availability(command)
                 tries += 1
-                if stderr and stderr != 'Process timed out.':
+                if not available:
                     if platform == 'linux':
                         logger.log('[*] Trying to start with systemctl interface.', YELLOW)
                         stderr = self.execute_process(['systemctl start tor.service'], root=True)[1]
@@ -233,11 +240,6 @@ class Tor(Service):
             return False
 
         self._kill_process()
-        if platform == 'linux':
-            if not self.execute_process(['systemctl start tor'], root=True)[1]:
-                logger.log('[*] Started tor on systemctl interface.', YELLOW)
-                self.started = True
-                return True
         self._start_in_background()
         return True
 

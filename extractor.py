@@ -275,6 +275,12 @@ class Tor(Service):
         self.socket_patched = False
         self.pid = None
 
+    def get_ip(self):
+        """Return tor IP"""
+        if not self.ip:
+            self._set_identity()
+        return self.ip
+
     def _start_in_background(self):
         """Start service in background with a Thread"""
         if self.started:
@@ -328,7 +334,7 @@ class Tor(Service):
                 error = self.execute_process(['kill ' + str(self.pid)])[1]
             if not error:
                 return True
-                
+
         if platform == 'windows':
             command = ['netstat -ano | findstr :9050']
             stdout, sterr = self.execute_process(command)
@@ -370,3 +376,29 @@ class Tor(Service):
                     if not stderr:
                         return True
                 return False
+
+    def _set_identity(self):
+        """Set tor service IP"""
+        if self.started:
+            logger.log('[*] Checking if tor is running and get relay ip. It can take a while...', YELLOW)
+            if not self.socket_patched:
+                # use monkey patching method to pass default proxy through socket
+                socks.set_default_proxy(socks.SOCKS5, '127.0.0.1', 9050)
+                socks.wrapmodule(urllib.request)
+                self.socket_patched = True
+            context = ssl.create_default_context(purpose=ssl.Purpose.CLIENT_AUTH)
+            response = urllib.request.urlopen('https://check.torproject.org', context=context).read()
+            if 'Congratulations. This browser is configured to use Tor' in response.decode():
+                ip = re.findall(r'Your IP address appears to be\:  \<strong\>(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', response.decode())
+                if len(ip) is 0:
+                    print(RED + '[-] Something on check tor website changed and we was unable to determine our IP.')
+                    print('[-] Please report a issue https://github.com/yanmarques/youtube-extractor/issues.')
+                    print('[*] We will be now trying to get out IP on another aproach.' + NULL)
+                    ip = urllib.request.urlopen('http://www.icanhazip.com').read()
+                    self.ip = ip.decode().strip()
+                else:
+                    self.ip = ip[0]
+            else:
+                raise Exception('Could not bind tor proxy on socket.')
+        else:
+            raise Exception('Tor service not started. Unable to get indentity')

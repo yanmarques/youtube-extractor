@@ -147,16 +147,16 @@ class YoutubeDl(Service):
         logger.log('[*] Running youtube-dl service.')
         command = ['youtube-dl']
         if not self.installed and not self.tried_to_install:
-            tries = 0
-            while tries < 2:
-                stderr = self.execute_process(command)[1]
-                tries += 1
-                self.tried_to_install = True
-                if stderr and 'usage' not in stderr.lower():
-                    logger.log('[*] Error: '+ stderr, RED)
-                    self._install()
-                else:
+            attempts = 0
+            while attempts < 2:
+                attempts += 1
+                available = self.check_availability(command, errors=True)
+                if available:
                     self.installed = True
+                else:
+                    logger.log('[*] Error: Service is not available on system.')
+                    self._install()
+                    self.tried_to_install = True
                 
         if self.tried_to_install and not self.installed:
             print('[*] Tried to install youtube-dl with no success.')
@@ -179,19 +179,19 @@ class YoutubeDl(Service):
         """Try to install youtube-dl with python"""
         loader = Loader(message='[*] Installing youtube-dl', color=YELLOW)
         command = ['-H python' + pyversion + ' -m pip install youtube-dl']
-        stderr = self.execute_process(command, root=True, loader=loader)[1]
-        if stderr:
-            logger.log('\n[-] Error: '+ stderr, RED)
+        error = self.execute_process(command, root=True, loader=loader)[1]
+        if error:
+            logger.log('\n[-] Error: '+ error, RED)
             logger.log('[*] Last command failed.')
             if platform == 'darwin':
                 command = ['brew install youtube-dl']
                 stderr = self.execute_process(command, timeout=None)[1]
             elif platform == 'linux':
                 command = ['apt-get install -y youtube-dl']
-                stderr = self.execute_process(command, timeout=None, root=True)[1]
+                error = self.execute_process(command, timeout=None, root=True)[1]
         loader.stop()
-        if stderr:
-            logger.log('\n[*] Error installing: '+ stderr, RED)
+        if error:
+            logger.log('\n[*] Error installing: '+ error, RED)
             print('[*] Could not install youtube-dl.')
             print('[+] See: https://rg3.github.io/youtube-dl')
             sys.exit()

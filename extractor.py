@@ -408,3 +408,48 @@ class Tor(Service):
                 raise Exception('Could not bind tor proxy on socket.')
         else:
             raise Exception('Tor service not started. Unable to get indentity')
+
+class Extractor(object):
+    """Extract video/audio from youtube urls with threading."""
+    def __init__(self, opts):
+        self.params = self._parse_opt(opts)
+        self.urls = self._parse_urls(opts)
+        self.tor = opts.tor
+        self.threads = opts.threads
+    
+    def _parse_opt(self, opts):
+        """Parse user options"""
+        params = []
+
+        # TODO - Add option to extract audio and video
+        if opts.audio and opts.video:
+            raise Exception('You choosed to extract both audio and video. This option is still not available.')
+    
+        if opts.audio:
+            params.append('-x')
+            params.append('--audio-quality ' + str(opts.audio_quality))
+            params.append('--audio-format ' + (opts.audio_format if opts.audio_format else 'bestaudio'))
+        elif opts.video:
+            params.append('-f')
+            params.append('--video-quality ' + str(opts.video_quality))
+            params.append('--video-format ' + (opts.video_format if opts.video_format else 'bestvideo'))
+
+        return params
+
+    def _parse_urls(self, opts):
+        """Retrive all urls from options"""
+        if opts.file:
+            path = os.path.normpath(opts.file)
+            if os.path.isfile(path):
+                with open(path, 'rb') as handler:
+                    urls = handler.read().decode().split('\n');
+                    for url in urls:
+                        if re.match(r'^(https?\:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/watch\?v\=.+$', url):
+                            opts.urls.append(url)
+                        else:
+                            logger.log('[-] Skipping URL: ' + url)
+            else:
+                raise OptionError('File does not exist.', '-f')  
+        if len(opts.urls) == 0:
+            raise OptionError('No urls specified.', 'url')  
+        return opts.urls      

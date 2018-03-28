@@ -9,6 +9,7 @@ __banner__  = 'youtube-extractor v.%s' % __version__
 
 from logger import *
 from abc import abstractmethod
+from optparse import OptionParser, OptionError
 import sys
 import os
 import subprocess 
@@ -31,7 +32,23 @@ else:
 
 pyversion = '.'.join(str(minor) for minor in sys.version_info[:2])
 logger = Logger()
-logger.set_verbose()
+
+def parse_opts():
+    options = OptionParser(usage='usage: %prog [options] url1 url2...')
+    options.add_option('--verbose', help='Be moderately verbose to watch every script step.', action='callback',
+        callback=lambda *args: logger.set_verbose())
+    options.add_option('-a', '--audio', help='Only extract audio.', dest='audio', action='store_true', default=False)
+    options.add_option('--audio-quality', help='Audio quality.', dest='audio_quality', type='int', default=0)
+    options.add_option('--audio-format', help='Audio format.', dest='audio_format', type='string')
+    options.add_option('-v', '--video', help='Only extract video.', dest='video', action='store_true', default=False)
+    options.add_option('--video-quality', help='Video quality.', dest='video_quality', type='int', default=0)
+    options.add_option('--video-format', help='Video format.', dest='video_format', type='string')
+    options.add_option('-t', help='Number of threads to use.', dest='threads', type='int', default=1)
+    options.add_option('--without-tor', help='Disable tor.', dest='tor', action='store_false', default=True)
+    options.add_option('-f', help='Read urls from specified file.', dest='file', type='string')
+    opts = options.parse_args()
+    opts[0].urls = opts[1]
+    return opts[0]
 
 def signalhandler(singnum, frame):
     """Handle a keyboard interrupt"""

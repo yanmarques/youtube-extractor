@@ -17,8 +17,8 @@ import time
 import threading
 import re
 import shlex
+import stem.process
 import urllib
-import stem
 
 # Detects user platform
 if sys.platform.startswith('win32'):
@@ -274,20 +274,21 @@ class Tor(Service):
         """Start service in background with a Thread"""
         if self.started:
             logger.log('[*] Tor service already running.')
-        elif not self.installed and self.tried_to_install:
-            logger.log('[*] Cannot start in background. First must be installed.')
-
-        self.started = True
-
+        
         if platform == 'linux':
             errors, pid = self.execute_process(['systemctl start tor'], root=True, pid=True)[0:]
             if not errors:
                 logger.log('[*] Started tor on systemctl interface.', YELLOW)
                 self.pid = pid
+                self.started = True
                 return True
-
-        process = stem.process.launch_tor()
-        self.pid = process.pid
+        try:
+            process = stem.process.launch_tor()
+            self.pid = process.pid
+            self.started = True
+        except OSError:
+            logger.log('[-] Failed to start tor.', RED)
+            return False
         return True
     
     def _install(self):

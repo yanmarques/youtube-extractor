@@ -296,7 +296,7 @@ class Tor(Service):
         loader = Loader(message='[*] Installing tor', color=YELLOW)
         loader.start()
         if platform == 'darwin':
-            command = ['brew install tor']
+            command = ['HOMEBREW_NO_AUTO_UPDATE=1 brew install tor']
             error = self.execute_process(command, timeout=None)[1]
         elif platform == 'linux':
             command = ['apt-get install -y tor']

@@ -16,9 +16,10 @@ import itertools
 import time
 import threading
 import re
-import shlex
+import ssl
+import socks
 import stem.process
-import urllib
+import urllib.request
 
 # Detects user platform
 if sys.platform.startswith('win32'):
@@ -327,7 +328,7 @@ class Tor(Service):
 
         if platform == 'windows':
             command = ['netstat -ano | findstr :9050']
-            stdout, sterr = self.execute_process(command)
+            output = self.execute_process(command)
             if not stdout:
                 return True
             else:
@@ -353,8 +354,6 @@ class Tor(Service):
                         return True
                 return False
         else:
-            command = ['sudo systemctl stop tor']
-            self.execute_process(command)[1]
             command = ['netstat -nlp | grep 9050']
             stdout, stderr = self.execute_process(command, root=True)
             if not stdout:

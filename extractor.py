@@ -189,7 +189,7 @@ class YoutubeDl(Service):
             logger.log('\n[-] Error: '+ error, RED)
             logger.log('[*] Last command failed.')
             if platform == 'darwin':
-                command = ['brew install youtube-dl']
+                command = ['HOMEBREW_NO_AUTO_UPDATE=1 brew install youtube-dl']
                 stderr = self.execute_process(command, timeout=None)[1]
             elif platform == 'linux':
                 command = ['apt-get install -y youtube-dl']

@@ -328,41 +328,41 @@ class Tor(Service):
 
         if platform == 'windows':
             command = ['netstat -ano | findstr :9050']
-            output = self.execute_process(command)
-            if not stdout:
+            output = self.execute_process(command)[0]
+            if not output:
                 return True
             else:
-                stdout = ' '.join([e for e in stdout.split(' ') if e])
-                pid = re.findall(r'LISTENING (\d)+', stdout)
+                output = ' '.join([e for e in output.split(' ') if e])
+                pid = re.findall(r'LISTENING (\d)+', output)
                 if len(pid) > 0:
-                    stderr = self.execute_process(['taskkill /PID {} /F'.format(pid[0])])[1]
-                    if not stderr:
+                    error = self.execute_process(['taskkill /PID {} /F'.format(pid[0])])[1]
+                    if not error:
                         return True
                 return False
 
         elif platform == 'darwin':
             command = ['lsof -i tcp:9050']
-            stdout, stderr = self.execute_process(command)
-            if not stdout:
+            output = self.execute_process(command)[0]
+            if not output:
                 return True
             else:
-                stdout = ' '.join([e for e in stdout.split(' ') if e])
-                pid = re.findall(r"[a-zA-Z]\s(\d+)", stdout)
+                output = ' '.join([e for e in output.split(' ') if e])
+                pid = re.findall(r"[a-zA-Z]\s(\d+)", output)
                 if len(pid) > 0:
-                    stderr = self.execute_process(['kill '+ pid[0]], root=True)[1]
-                    if not stderr:
+                    error = self.execute_process(['kill '+ pid[0]], root=True)[1]
+                    if not error:
                         return True
                 return False
         else:
             command = ['netstat -nlp | grep 9050']
-            stdout, stderr = self.execute_process(command, root=True)
-            if not stdout:
+            output = self.execute_process(command, root=True)[0]
+            if not output:
                 return True
             else:
-                pid = re.findall(r"(\d+)\/[a-zA-Z]+", stdout)
+                pid = re.findall(r"(\d+)\/[a-zA-Z]+", output)
                 if len(pid) > 0:
-                    stderr = self.execute_process(['kill '+ pid[0]], root=True)[1]
-                    if not stderr:
+                    error = self.execute_process(['kill '+ pid[0]], root=True)[1]
+                    if not error:
                         return True
                 return False
 

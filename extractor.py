@@ -222,30 +222,16 @@ class Tor(Service):
             raise ProcessNotKilledException('Could not kill a already running tor process.')
 
         logger.log('[*] Starting tor service.')
-        command = ['tor']
-        if not self.installed and not self.tried_to_install:
-            tries = 0
-            while tries < 2:
-                available = self.check_availability(command)
-                tries += 1
-                if not available:
-                    if platform == 'linux':
-                        logger.log('[*] Trying to start with systemctl interface.', YELLOW)
-                        stderr = self.execute_process(['systemctl start tor.service'], root=True)[1]
-                        if not stderr:
-                            self.installed = True
-                            break
-                    logger.log('[*] Error: '+ stderr, RED)
-                    self._install()
-                else:
-                    self.installed = True
-                    break
-                
-        if self.tried_to_install and not self.installed:
-            return False
+        if not self.started:
+            if not self._start_in_background(): 
+                logger.log('[*] Error: Service is not available on system.', RED)
+                self._install()  
+                # auto restart script
+                os.execv(sys.executable, [sys.executable] + sys.argv)
 
-        self._kill_process()
-        self._start_in_background()
+        if not self.installed and self.tried_to_install:
+            print(RED +'[-] Could not install tor.'+ NULL)
+            return False
         return True
 
     def restart(self, *args):

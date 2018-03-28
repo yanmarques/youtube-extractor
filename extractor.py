@@ -155,7 +155,7 @@ class YoutubeDl(Service):
             attempts = 0
             while attempts < 2:
                 attempts += 1
-                available = self.check_availability(command, errors=True)
+                available = self.check_availability(command)
                 if available:
                     self.installed = True
                 else:
@@ -170,9 +170,9 @@ class YoutubeDl(Service):
         
         if args:
             command.append(*args)
-        stderr = self.execute_process(command)[1]
-        if stderr and not 'help' in stderr.lower():
-            logger.log('[*] Error output: '+ stderr, RED)
+        error = self.execute_process(command)[1]
+        if error and not 'help' in error.lower():
+            logger.log('[*] Error output: '+ error, RED)
             return False
         return True
 

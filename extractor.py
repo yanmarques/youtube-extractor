@@ -1,3 +1,6 @@
+#!/usr/bin/python
+# -*- coding: UTF-8 -*-
+
 __author__  = 'Yan Marques de Cerqueira'
 __email__   = 'marques_yan@outlook.com'
 __git__     = 'https://github.com/yanmarques/youtube-extractor'
@@ -122,14 +125,12 @@ class Service(object):
             return output, errors, process.pid
         return output, errors
 
-    def check_availability(self, command, errors=False):
+    def check_availability(self, command):
         """Check if service is available on user system"""
         stderr = self.execute_process(command if type(command) is list else [command])[1]
         
         if stderr and ( 'usage' in stderr.lower() or 'Process timed out' in stderr ):
             return True
-        if errors:
-            return (None, stderr)
         return False
 
     def _parse_output(self, stdout, stderr):

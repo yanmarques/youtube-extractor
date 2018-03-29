@@ -416,7 +416,7 @@ class Extractor(object):
         self.urls = self._parse_urls(opts)
         self.tor = opts.tor
         self.threads = opts.threads
-    
+
     def _parse_opt(self, opts):
         """Parse user options"""
         params = []
@@ -453,3 +453,57 @@ class Extractor(object):
         if len(opts.urls) == 0:
             raise OptionError('No urls specified.', 'url')  
         return opts.urls      
+
+class ThreadingManager(object):
+    """Manage concurrencie running threads"""
+    def __init__(self, concurrencies, with_overlapping=True):
+        self.concurrencies = concurrencies
+        self.threads = []
+        self.started = 0
+        self.executed = 0
+        self.overlap = with_overlapping
+        self.event = threading.Event()
+
+    def add(self, function, *args):
+        """"Add a thread to manager"""
+        index = len(self.threads) + 1
+        self.threads.append(threading.Thread(target=self._wrap_function, args=(function, args)))
+
+    def start(self):
+        """Started all threads in concurrency mode"""
+        if self.concurrencies >= len(self.threads):
+            for thread in self.threads:
+                thread.start()
+        else:
+            self.event.set()
+            for thread in self.threads[:self.concurrencies]:
+                thread.start()    
+                self.started += 1
+            self._manage_threads()
+
+    def stop(self):
+        """Stop all registered threads"""
+        self.event.clear()
+
+    def _wrap_function(self, function, *args):
+        """Wrap the callback on thread function"""
+        function(*args)
+        self.executed += 1
+
+    def _manage_threads(self):
+        """Manage all registered threads to overlap each one or run in sequence"""
+        while self.event.is_set():
+            if len(self.threads) == self.executed:
+                self.stop()
+                continue
+            if self.overlap:
+                if self.executed > 0:
+                    end = self.executed - self.concurrencies if self.concurrencies - self.executed != 0 else len(self.threads)
+                    for thread in self.threads[self.started:end]:
+                        thread.start()
+                        self.started += 1
+            else:
+                if self.started == self.executed:
+                    for thread in self.threads[self.started:self.started + self.concurrencies]:
+                        thread.start()
+                        self.started += 1

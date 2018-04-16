@@ -9,7 +9,7 @@ __banner__  = 'youtube-extractor v.%s' % __version__
 
 from logger import *
 from abc import abstractmethod
-from optparse import OptionParser, OptionError
+from argparse import ArgumentParser, ArgumentError
 import sys
 import os
 import subprocess 
@@ -21,6 +21,7 @@ import ssl
 import socks
 import stem.process
 import urllib.request
+import signal
 
 # Detects user platform
 if sys.platform.startswith('win32'):
@@ -34,21 +35,19 @@ pyversion = '.'.join(str(minor) for minor in sys.version_info[:2])
 logger = Logger()
 
 def parse_opts():
-    options = OptionParser(usage='usage: %prog [options] url1 url2...')
-    options.add_option('--verbose', help='Be moderately verbose to watch every script step.', action='callback',
-        callback=lambda *args: logger.set_verbose())
-    options.add_option('-a', '--audio', help='Only extract audio.', dest='audio', action='store_true', default=False)
-    options.add_option('--audio-quality', help='Audio quality.', dest='audio_quality', type='int', default=0)
-    options.add_option('--audio-format', help='Audio format.', dest='audio_format', type='string')
-    options.add_option('-v', '--video', help='Only extract video.', dest='video', action='store_true', default=False)
-    options.add_option('--video-quality', help='Video quality.', dest='video_quality', type='int', default=0)
-    options.add_option('--video-format', help='Video format.', dest='video_format', type='string')
-    options.add_option('-t', help='Number of threads to use.', dest='threads', type='int', default=1)
-    options.add_option('--without-tor', help='Disable tor.', dest='tor', action='store_false', default=True)
-    options.add_option('-f', help='Read urls from specified file.', dest='file', type='string')
-    opts = options.parse_args()
-    opts[0].urls = opts[1]
-    return opts[0]
+    arguments = ArgumentParser(usage='usage: [options] [url...]')
+    arguments.add_argument('--verbose', help='Be moderately verbose to watch every script step.', dest='verbose', action='store_true', default=False)
+    arguments.add_argument('-a', '--audio', help='Only extract audio.', dest='audio', action='store_true', default=False)
+    arguments.add_argument('--audio-quality', help='Audio quality.', dest='audio_quality', type=int, default=0)
+    arguments.add_argument('--audio-format', help='Audio format.', dest='audio_format', type=str)
+    arguments.add_argument('-v', '--video', help='Only extract video.', dest='video', action='store_true', default=False)
+    arguments.add_argument('--video-quality', help='Video quality.', dest='video_quality', type=int, default=0)
+    arguments.add_argument('--video-format', help='Video format.', dest='video_format', type=str)
+    arguments.add_argument('-t', help='Number of threads to use.', dest='threads', type=int, default=1)
+    arguments.add_argument('--without-tor', help='Disable tor.', dest='tor', action='store_false', default=True)
+    arguments.add_argument('-f', help='Read urls from specified file.', dest='file', type=str)
+    arguments.add_argument('url', help='Url to extract data', action='append', nargs='*')
+    return arguments.parse_args()
 
 def signalhandler(singnum, frame):
     """Handle a keyboard interrupt"""
@@ -188,7 +187,7 @@ class YoutubeDl(Service):
         
         if args:
             command.append(*args)
-        error = self.execute_process(command)[1]
+        error = self.execute_process([' '.join(command)], timeout=None)[1]
         if error and not 'help' in error.lower():
             logger.log('[*] Error output: '+ error, RED)
             return False
@@ -236,9 +235,6 @@ class Tor(Service):
             logger.log('[*] Service already started.')
             return True
        
-        if not self._kill_process():
-            raise ProcessNotKilledException('Could not kill a already running tor process.')
-
         logger.log('[*] Starting tor service.')
         if not self.started:
             if not self._start_in_background(): 
@@ -412,10 +408,24 @@ class Tor(Service):
 class Extractor(object):
     """Extract video/audio from youtube urls with threading."""
     def __init__(self, opts):
+        self.opts = opts
         self.params = self._parse_opt(opts)
         self.urls = self._parse_urls(opts)
-        self.tor = opts.tor
+        self.tor = None
         self.threads = opts.threads
+
+    def run(self, with_overlapping=True):
+        manager = ThreadingManager(self.threads)
+        ydl = YoutubeDl()
+        ydl.start()
+        print(self.tor.get_ip())
+        for url in self.urls:
+            manager.add(self._run_yotube_dl_service, ydl, url)
+        manager.start()
+        print(GREEN + '[+] Download finished.' + NULL)
+
+    def _run_yotube_dl_service(self, ydl, url):
+        ydl.start(' '.join(self.params) + ' {}'.format(url))
 
     def _parse_opt(self, opts):
         """Parse user options"""
@@ -425,14 +435,23 @@ class Extractor(object):
         if opts.audio and opts.video:
             raise Exception('You choosed to extract both audio and video. This option is still not available.')
     
+        if opts.verbose:
+            logger.set_verbose()
+
         if opts.audio:
             params.append('-x')
             params.append('--audio-quality ' + str(opts.audio_quality))
-            params.append('--audio-format ' + (opts.audio_format if opts.audio_format else 'bestaudio'))
+            params.append('--audio-format ' + (opts.audio_format if opts.audio_format else 'mp3'))
         elif opts.video:
             params.append('-f')
             params.append('--video-quality ' + str(opts.video_quality))
-            params.append('--video-format ' + (opts.video_format if opts.video_format else 'bestvideo'))
+            params.append('--video-format ' + (opts.video_format if opts.video_format else 'mp4'))
+        params.append('--no-check-certificate')
+
+        if opts.tor:
+            # Start tor
+            self.tor = Tor()
+            self.tor.start()
 
         return params
 
@@ -443,16 +462,16 @@ class Extractor(object):
             if os.path.isfile(path):
                 with open(path, 'rb') as handler:
                     urls = handler.read().decode().split('\n');
-                    for url in urls:
-                        if re.match(r'^(https?\:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/watch\?v\=.+$', url):
-                            opts.urls.append(url)
-                        else:
+                    for index, url in enumerate(urls):
+                        if not re.match(r'^(https?\:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/watch\?v\=.+$', url):
                             logger.log('[-] Skipping URL: ' + url)
+                            del urls[index]
+                    opts.url = urls
             else:
-                raise OptionError('File does not exist.', '-f')  
-        if len(opts.urls) == 0:
-            raise OptionError('No urls specified.', 'url')  
-        return opts.urls      
+                raise ArgumentError('File does not exist.', '-f')  
+        if len(opts.url) == 0:
+            raise ArgumentError('No urls specified.', 'url')  
+        return opts.url    
 
 class ThreadingManager(object):
     """Manage concurrencie running threads"""
@@ -466,18 +485,19 @@ class ThreadingManager(object):
 
     def add(self, function, *args):
         """"Add a thread to manager"""
-        index = len(self.threads) + 1
-        self.threads.append(threading.Thread(target=self._wrap_function, args=(function, args)))
+        self.threads.append(threading.Thread(target=self._wrap_function, args=(function, *args)))
 
     def start(self):
         """Started all threads in concurrency mode"""
         if self.concurrencies >= len(self.threads):
             for thread in self.threads:
                 thread.start()
+                thread.join()
         else:
             self.event.set()
             for thread in self.threads[:self.concurrencies]:
-                thread.start()    
+                thread.start()
+                thread.join()    
                 self.started += 1
             self._manage_threads()
 
@@ -497,9 +517,9 @@ class ThreadingManager(object):
                 self.stop()
                 continue
             if self.overlap:
-                if self.executed > 0:
-                    end = self.executed - self.concurrencies if self.concurrencies - self.executed != 0 else len(self.threads)
-                    for thread in self.threads[self.started:end]:
+                if self.executed - self.started >= 0:
+                    end = self.executed - self.started if self.concurrencies - (self.executed - self.started) <= 0 else self.concurrencies
+                    for thread in self.threads[self.started:self.started + end]:
                         thread.start()
                         self.started += 1
             else:
@@ -507,3 +527,9 @@ class ThreadingManager(object):
                     for thread in self.threads[self.started:self.started + self.concurrencies]:
                         thread.start()
                         self.started += 1
+
+if __name__ == '__main__':
+    signal.signal(signal.SIGINT, signalhandler)
+    opts = parse_opts()
+    extractor = Extractor(opts)
+    extractor.run()

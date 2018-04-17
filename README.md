@@ -6,7 +6,7 @@
 
 # Description
 Python script to extract audio or videos from youtube. We use the wonderfull [youtube-dl](https://github.com/rg3/youtube-dl)
-module to extract the content, and [tor](https://www.torproject.org) as proxy.
+module to extract the content, and [tor](https://www.torproject.org) as proxy server using with experimental purpose.
 
 # Installation
 Youtube-extractor is a python program and requires [PySocks](https://pypi.org/project/PySocks/) and [stem](https://pypi.org/project/stem/). Please install this modules with manually or use the requirements text file. To install with text file, type:
@@ -25,19 +25,15 @@ usage: usage: [options] [url...]
 # Options
 The options to download the desired content from script.
 ```
--h, --help            show this help message and exit
+  -h, --help            show this help message and exit
   --verbose             Be moderately verbose to watch every script step.
   -a, --audio           Only extract audio.
-  --audio-quality AUDIO_QUALITY
-                        Audio quality.
-  --audio-format AUDIO_FORMAT
-                        Audio format.
+  --audio-quality       Audio quality.
+  --audio-format        Audio format.
   -v, --video           Only extract video.
-  --video-quality VIDEO_QUALITY
-                        Video quality.
-  --video-format VIDEO_FORMAT
-                        Video format.
+  --video-quality       Video quality.
+  --video-format        Video format.
   -t THREADS            Number of threads to use.
-  --without-tor         Disable tor.
+  --with-tor            Enable tor. [Experimental].
   -f FILE               Read urls from specified file.
 ```

@@ -231,7 +231,10 @@ class Tor(Service):
 
     def start(self):
         """Start tor"""
-        if self.started:
+        pid = self._is_process_running()
+        print(pid)
+        if self.started or pid:
+            self.pid = pid
             logger.log('[*] Service already started.')
             return True
        
@@ -244,7 +247,7 @@ class Tor(Service):
                 os.execv(sys.executable, [sys.executable] + sys.argv)
 
         if not self.installed and self.tried_to_install:
-            print(RED +'[-] Could not install tor.'+ NULL)
+            print(RED +'[-] Could not run or install tor.'+ NULL)
             return False
         return True
 
@@ -329,6 +332,33 @@ class Tor(Service):
         self.tried_to_install = True
         logger.log('\n[*] tor has been installed.', color=GREEN)
 
+    def _is_process_running(self):
+        """Determine wheter there is a tor process running."""
+        if platform == 'windows':
+            command = ['netstat -ano | findstr :9050']
+            output = self.execute_process(command)[0]
+            if output:
+                output = ' '.join([e for e in output.split(' ') if e])
+                pid = re.findall(r'LISTENING (\d)+', output)
+                if len(pid) > 0:
+                    return pid[0]
+        elif platform == 'darwin':
+            command = ['lsof -i tcp:9050']
+            output = self.execute_process(command)[0]
+            if output:
+                output = ' '.join([e for e in output.split(' ') if e])
+                pid = re.findall(r'[a-zA-Z]\s(\d+)', output)
+                if len(pid) > 0:
+                    return pid[0]
+        else:
+            command = ['netstat -nlp | grep 9050']
+            output = self.execute_process(command, root=True)[0]
+            if output:
+                pid = re.findall(r"(\d+)\/[a-zA-Z]+", output)
+                if len(pid) > 0:
+                    return pid[0]
+        return False
+
     def _kill_process(self):
         """Handle the process being executed on tor default port and kill it"""
         if self.started and self.pid:
@@ -339,45 +369,20 @@ class Tor(Service):
             if not error:
                 return True
 
-        if platform == 'windows':
-            command = ['netstat -ano | findstr :9050']
-            output = self.execute_process(command)[0]
-            if not output:
-                return True
-            else:
-                output = ' '.join([e for e in output.split(' ') if e])
-                pid = re.findall(r'LISTENING (\d)+', output)
-                if len(pid) > 0:
-                    error = self.execute_process(['taskkill /PID {} /F'.format(pid[0])])[1]
-                    if not error:
-                        return True
-                return False
+        # Get pid if process is running.
+        pid = self._is_process_running()
 
-        elif platform == 'darwin':
-            command = ['lsof -i tcp:9050']
-            output = self.execute_process(command)[0]
-            if not output:
-                return True
-            else:
-                output = ' '.join([e for e in output.split(' ') if e])
-                pid = re.findall(r"[a-zA-Z]\s(\d+)", output)
-                if len(pid) > 0:
-                    error = self.execute_process(['kill '+ pid[0]], root=True)[1]
-                    if not error:
-                        return True
-                return False
-        else:
-            command = ['netstat -nlp | grep 9050']
-            output = self.execute_process(command, root=True)[0]
-            if not output:
-                return True
-            else:
-                pid = re.findall(r"(\d+)\/[a-zA-Z]+", output)
-                if len(pid) > 0:
-                    error = self.execute_process(['kill '+ pid[0]], root=True)[1]
-                    if not error:
-                        return True
-                return False
+        if pid:
+            if platform == 'windows':
+                error = self.execute_process(['taskkill /PID {} /F'.format(pid)])[1]
+                if not error:
+                    return True
+            elif platform == 'linux':
+                error = self.execute_process(['kill {}'.format(pid)], root=True)[1]
+                if not error:
+                    return True
+            return False
+        return True
 
     def _set_identity(self):
         """Set tor service IP"""
@@ -468,7 +473,7 @@ class Extractor(object):
                             del urls[index]
                     opts.url = urls
             else:
-                raise ArgumentError('File does not exist.', '-f')  
+                raise ArgumentError('-f', 'File does not exist') 
         if len(opts.url) == 0:
             raise ArgumentError('No urls specified.', 'url')  
         return opts.url    

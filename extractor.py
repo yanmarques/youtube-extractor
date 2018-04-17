@@ -44,7 +44,7 @@ def parse_opts():
     arguments.add_argument('--video-quality', help='Video quality.', dest='video_quality', type=int, default=0)
     arguments.add_argument('--video-format', help='Video format.', dest='video_format', type=str)
     arguments.add_argument('-t', help='Number of threads to use.', dest='threads', type=int, default=1)
-    arguments.add_argument('--without-tor', help='Disable tor.', dest='tor', action='store_false', default=True)
+    arguments.add_argument('--with-tor', help='Enable tor. [Experimental]', dest='tor', action='store_false', default=True)
     arguments.add_argument('-f', help='Read urls from specified file.', dest='file', type=str)
     arguments.add_argument('url', help='Url to extract data', action='append', nargs='*')
     return arguments.parse_args()
@@ -232,7 +232,8 @@ class Tor(Service):
     def start(self):
         """Start tor"""
         pid = self._is_process_running()
-        print(pid)
+        print('{}Tor is our new feature. Here we start tor on port 9050 and use the proxy server.'.format(GREEN))
+        print('The downloads will pass through tor network and download the file without tracking(we wish!)')
         if self.started or pid:
             self.pid = pid
             logger.log('[*] Service already started.')

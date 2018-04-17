@@ -1,0 +1,3 @@
+Youtube-Extractor
+stem==1.6.0
+PySocks==1.6.7

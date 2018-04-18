@@ -16,6 +16,19 @@ Youtube-extractor is a python program and requires [PySocks](https://pypi.org/pr
 
 - If you do not have python installed on your computer, please read [this](http://docs.python-guide.org/en/latest/starting/install3/linux/) article.
 
+Once you got everything up, to execute the script you can use the python interpreter, type:
+```
+   python3 extractor.py
+```
+Or use the implict interpreter on file. The first step is to make the script a executable, then type:
+```
+   sudo chmod +x extractor.py
+```
+And now we can just execute as a executable, type:
+```
+   ./extractor.py
+```
+
 # Usage
 The script uses youtube-dl to download the desired content. But we starts the tor proxy to be runned with youtube-dl downloads.
 ```

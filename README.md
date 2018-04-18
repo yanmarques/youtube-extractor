@@ -16,11 +16,12 @@ Youtube-extractor is a python program and requires [PySocks](https://pypi.org/pr
 
 - If you do not have python installed on your computer, please read [this](http://docs.python-guide.org/en/latest/starting/install3/linux/) article.
 
-Once you got everything up, to execute the script you can use the python interpreter, type:
+Once you got everything up, there are a few ways to execute.
+- The python interpreter, type:
 ```
    python3 extractor.py
 ```
-Or use the implict interpreter on file. The first step is to make the script a executable, then type:
+- The implict interpreter on file.The first step is to make the script a executable, then type:
 ```
    sudo chmod +x extractor.py
 ```

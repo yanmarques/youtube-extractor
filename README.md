@@ -25,7 +25,7 @@ Once you got everything up, there are a few ways to execute.
 ```
    sudo chmod +x extractor.py
 ```
-And now we can just execute as a executable, type:
+   And now we can just execute as a executable, type:
 ```
    ./extractor.py
 ```
